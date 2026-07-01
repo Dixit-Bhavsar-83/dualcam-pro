@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>DualCam Pro Premium</title>
+    <title>DualCam Pro Production</title>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
     <style>
@@ -11,116 +11,99 @@
             margin: 0; padding: 0; width: 100%; height: 100%;
             background-color: #000; overflow: hidden; font-family: system-ui, -apple-system, sans-serif;
         }
-        .camera-grid::before, .camera-grid::after {
-            content: ''; position: absolute; background: rgba(255,255,255,0.15); z-index: 10; pointer-events: none;
+        .horizontal-layer {
+            transform: rotate(0deg); object-fit: cover;
         }
-        .camera-grid::before { top: 33.33%; bottom: 33.33%; left: 0; right: 0; border-top: 1px dashed rgba(255,255,255,0.25); border-bottom: 1px dashed rgba(255,255,255,0.25); }
-        .camera-grid::after { left: 33.33%; right: 33.33%; top: 0; bottom: 0; border-left: 1px dashed rgba(255,255,255,0.25); border-right: 1px dashed rgba(255,255,255,0.25); }
-        .grid-hidden::before, .grid-hidden::after { display: none !important; }
     </style>
 </head>
 <body class="text-white select-none">
 
-    <div id="splashScreen" class="fixed inset-0 bg-stone-950 z-50 flex flex-col items-center justify-center transition-opacity duration-500">
-        <div class="w-20 h-20 bg-linear-to-tr from-blue-600 to-indigo-600 rounded-3xl flex items-center justify-center shadow-xl shadow-blue-500/20 animate-bounce">
-            <span class="material-icons-round text-4xl text-white">videocam</span>
+    <div id="splashScreen" class="fixed inset-0 bg-neutral-950 z-50 flex flex-col items-center justify-center transition-opacity duration-500">
+        <div class="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/20">
+            <span class="material-icons-round text-3xl text-white">videocam</span>
         </div>
-        <h1 class="text-xl font-bold tracking-wider mt-4 bg-linear-to-r from-white to-stone-400 bg-clip-text text-transparent">DUALCAM PRO</h1>
-        <p class="text-xs text-stone-500 font-mono mt-1">v2.0 Premium Production</p>
+        <h1 class="text-lg font-bold tracking-widest mt-4">DUALCAM PRO</h1>
+        <p class="text-[10px] text-neutral-500 font-mono mt-1">v2.5 Stable Engine</p>
     </div>
 
-    <div id="permissionScreen" class="fixed inset-0 bg-stone-900 z-40 flex flex-col items-center justify-center p-6 text-center hidden">
-        <span class="material-icons-round text-6xl text-blue-500 mb-4">security_camera</span>
-        <h2 class="text-2xl font-bold mb-2">Camera Hardware Access</h2>
-        <p class="text-stone-400 text-sm max-w-xs mb-8">DualCam Pro requires native dual sensor configuration arrays to capture composite front & back media channels simultaneously.</p>
-        <button id="btnGrantPermission" class="w-full max-w-xs bg-blue-600 hover:bg-blue-700 text-white font-semibold py-4 rounded-2xl shadow-lg shadow-blue-600/30 active:scale-98 transition-all">
-            Grant Native Access
+    <div id="permissionScreen" class="fixed inset-0 bg-neutral-900 z-40 flex flex-col items-center justify-center p-6 text-center hidden">
+        <span class="material-icons-round text-5xl text-blue-500 mb-3">photo_camera</span>
+        <h2 class="text-xl font-bold mb-2">Camera Matrix Access</h2>
+        <p class="text-neutral-400 text-xs max-w-xs mb-6">DualCam requires initialization hooks for primary rear wide-angle and front selfie camera arrays simultaneously.</p>
+        <button id="btnGrantPermission" class="w-full max-w-xs bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3.5 rounded-xl shadow-lg transition-all active:scale-95">
+            Initialize Hardware
         </button>
     </div>
 
     <div class="relative w-full h-full bg-black">
         
-        <div id="cameraViewport" class="absolute inset-0 w-full h-full overflow-hidden camera-grid grid-hidden">
-            <video id="videoBack" class="w-full h-full object-cover" autoplay playsinline muted></video>
-            <canvas id="simulatedBackCanvas" class="w-full h-full object-cover hidden"></canvas>
-            
-            <div id="flashOverlay" class="absolute inset-0 bg-white pointer-events-none opacity-0 transition-opacity duration-150 z-20"></div>
+        <div id="cameraViewport" class="absolute inset-0 w-full h-full overflow-hidden bg-neutral-950">
+            <video id="videoBack" class="w-full h-full object-cover horizontal-layer" autoplay playsinline muted></video>
+            <div id="flashOverlay" class="absolute inset-0 bg-white pointer-events-none opacity-0 transition-opacity duration-100 z-20"></div>
         </div>
 
-        <div id="frontCamContainer" class="absolute top-16 right-4 w-32 h-44 bg-stone-900 rounded-2xl overflow-hidden shadow-2xl border-2 border-white/20 z-30 touch-none">
+        <div id="frontCamContainer" class="absolute top-14 right-4 w-28 h-36 bg-neutral-800 rounded-xl overflow-hidden shadow-2xl border border-white/20 z-30 touch-none">
             <video id="videoFront" class="w-full h-full object-cover scale-x-[-1]" autoplay playsinline muted></video>
-            <canvas id="simulatedFrontCanvas" class="w-full h-full object-cover hidden"></canvas>
         </div>
 
-        <div class="absolute top-0 left-0 right-0 p-4 pt-8 bg-linear-to-b from-black/60 to-transparent flex justify-between items-center z-30">
-            <div class="flex gap-2">
-                <button id="quickFlash" class="w-10 h-10 rounded-full bg-black/40 backdrop-blur-md flex items-center justify-center active:scale-90 transition-transform">
-                    <span id="flashIcon" class="material-icons-round text-xl">flash_off</span>
-                </button>
-                <button id="quickGrid" class="w-10 h-10 rounded-full bg-black/40 backdrop-blur-md flex items-center justify-center active:scale-90 transition-transform">
-                    <span id="gridIcon" class="material-icons-round text-xl">grid_on</span>
-                </button>
+        <div class="absolute top-0 left-0 right-0 p-4 pt-6 bg-gradient-to-b from-black/70 to-transparent flex justify-between items-center z-30">
+            <button id="quickFlash" class="w-9 h-9 rounded-full bg-black/40 backdrop-blur-md flex items-center justify-center border border-white/10">
+                <span id="flashIcon" class="material-icons-round text-lg">flash_off</span>
+            </button>
+            
+            <div id="recordingHUD" class="bg-neutral-900/90 border border-red-500/30 px-3 py-1 rounded-full text-xs font-mono font-bold flex items-center gap-2 opacity-0 transition-opacity duration-300">
+                <span class="w-2 h-2 rounded-full bg-red-500 animate-ping"></span>
+                <span id="txtTimer" class="text-white tracking-wider">00:00</span>
             </div>
-            <div id="recordingHUD" class="bg-red-600/90 text-white px-3 py-1.5 rounded-full text-xs font-mono font-bold flex items-center gap-1.5 opacity-0 transition-opacity">
-                <span class="w-2 h-2 rounded-full bg-white animate-pulse"></span>
-                <span id="txtTimer">00:00</span>
-                <span class="text-[10px] text-white/70">REC</span>
-            </div>
-            <div>
-                <button id="btnOpenSettings" class="w-10 h-10 rounded-full bg-black/40 backdrop-blur-md flex items-center justify-center active:scale-90 transition-transform">
-                    <span class="material-icons-round text-xl">tune</span>
-                </button>
-            </div>
+
+            <button id="btnOpenSettings" class="w-9 h-9 rounded-full bg-black/40 backdrop-blur-md flex items-center justify-center border border-white/10">
+                <span class="material-icons-round text-lg">settings</span>
+            </button>
         </div>
 
-        <div class="absolute left-4 top-1/3 bottom-1/3 w-8 flex flex-col items-center justify-center bg-black/30 backdrop-blur-md rounded-2xl z-30 p-1 py-4 border border-white/5">
-            <span class="material-icons-round text-xs text-white/60 mb-2">light_mode</span>
-            <input id="exposureSlider" type="range" min="-2" max="2" step="0.5" value="0" class="h-full accent-blue-500 pointer-events-auto" style="writing-mode: vertical-lr; direction: rtl;">
+        <div class="absolute left-4 top-1/3 bottom-1/3 w-8 flex flex-col items-center justify-center bg-black/40 backdrop-blur-md rounded-xl z-30 p-1 py-3 border border-white/10">
+            <span class="material-icons-round text-xs text-white/50 mb-2">light_mode</span>
+            <input id="exposureSlider" type="range" min="-2" max="2" step="0.5" value="0" class="h-full accent-blue-500" style="writing-mode: vertical-lr; direction: rtl;">
         </div>
 
-        <div class="absolute bottom-0 left-0 right-0 p-6 pb-10 bg-linear-to-t from-black/80 via-black/40 to-transparent flex justify-around items-center z-30">
-            <button id="btnOpenGallery" class="w-12 h-12 rounded-xl bg-stone-800 border-2 border-white/20 overflow-hidden flex items-center justify-center active:scale-90 transition-transform">
-                <span id="galleryThumb" class="material-icons-round text-white/40 text-2xl">photo_library</span>
+        <div class="absolute bottom-0 left-0 right-0 p-6 pb-8 bg-gradient-to-t from-black/80 to-transparent flex justify-around items-center z-30">
+            <button id="btnOpenGallery" class="w-11 h-11 rounded-xl bg-neutral-900 border border-white/10 flex items-center justify-center">
+                <span id="galleryThumb" class="material-icons-round text-white/60 text-xl">photo_library</span>
             </button>
 
-            <div class="relative w-20 h-20 flex items-center justify-center">
-                <svg class="absolute inset-0 w-full h-full transform -rotate-90 pointer-events-none" viewBox="0 0 100 100">
-                    <circle cx="50" cy="50" r="42" stroke="rgba(255,255,255,0.2)" stroke-width="4" fill="none" />
-                    <circle id="recordingProgressRing" cx="50" cy="50" r="42" stroke="#ef4444" stroke-width="4" fill="none" stroke-dasharray="264" stroke-dashoffset="264" class="transition-all duration-300" />
-                </svg>
-                <button id="btnRecord" class="w-16 h-16 rounded-full bg-white flex items-center justify-center shadow-lg active:scale-95 transition-all z-10">
-                    <div id="recordTriggerState" class="w-6 h-6 rounded-full bg-red-600 transition-all duration-300"></div>
+            <div class="relative w-16 h-16 flex items-center justify-center bg-white/10 rounded-full border border-white/20">
+                <button id="btnRecord" class="w-12 h-12 rounded-full bg-white flex items-center justify-center shadow-md transition-all duration-300">
+                    <div id="recordTriggerState" class="w-5 h-5 rounded-full bg-red-600 transition-all duration-300"></div>
                 </button>
             </div>
 
-            <button id="btnSwapLayout" class="w-12 h-12 rounded-full bg-black/50 backdrop-blur-md border border-white/10 flex items-center justify-center active:scale-90 transition-transform">
-                <span class="material-icons-round text-2xl text-white">flip_camera_ios</span>
-            </button>
+            <div class="w-11 h-11"></div>
         </div>
     </div>
 
-    <div id="settingsBottomSheet" class="fixed bottom-0 left-0 right-0 bg-stone-900 border-t border-stone-800 rounded-t-3xl p-6 transform translate-y-full transition-transform duration-300 ease-out z-50">
-        <div id="btnCloseSettingsHandle" class="w-12 h-1.5 bg-stone-700 rounded-full mx-auto mb-6 cursor-pointer"></div>
-        <h3 class="text-lg font-bold mb-4 flex items-center gap-2"><span class="material-icons-round text-blue-500">settings</span> Engine Parameters</h3>
-        
-        <div class="space-y-4">
-            <div class="flex justify-between items-center p-3 bg-stone-950 rounded-xl">
-                <div><p class="text-sm font-semibold">Real-Time Stabilization</p><p class="text-[11px] text-stone-500">EIS Hardware Layer Hybrid</p></div>
-                <input type="checkbox" id="toggleStabilization" class="w-10 h-5 accent-blue-600">
-            </div>
-            <div class="flex justify-between items-center p-3 bg-stone-950 rounded-xl">
-                <div><p class="text-sm font-semibold">Pro Portrait Filter</p><p class="text-[11px] text-stone-500">AI Beauty Smoothing Filter</p></div>
-                <input type="checkbox" id="toggleBeauty" class="w-10 h-5 accent-blue-600">
+    <div id="settingsBottomSheet" class="fixed bottom-0 left-0 right-0 bg-neutral-900 border-t border-neutral-800 rounded-t-2xl p-5 transform translate-y-full transition-transform duration-300 ease-out z-50">
+        <div id="btnCloseSettingsHandle" class="w-10 h-1 bg-neutral-700 rounded-full mx-auto mb-4 cursor-pointer"></div>
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-sm font-bold tracking-wide text-neutral-400 uppercase">Hardware Framework Parameters</h3>
+            <button id="btnBackSettings" class="text-xs text-blue-500 font-medium px-2 py-1 rounded-md bg-blue-500/10">Done</button>
+        </div>
+        <div class="space-y-3">
+            <div class="flex justify-between items-center p-3 bg-neutral-950 rounded-xl border border-neutral-800">
+                <div>
+                    <p class="text-xs font-semibold">Force Wide Angle Lens</p>
+                    <p class="text-[10px] text-neutral-500">Attempts auxiliary sensor routing override</p>
+                </div>
+                <input type="checkbox" id="toggleWide" class="w-8 h-4 accent-blue-500">
             </div>
         </div>
     </div>
 
-    <div id="galleryModal" class="fixed inset-0 bg-black transform translate-y-full transition-transform duration-300 ease-in-out z-50 p-4 pt-12 flex flex-col">
-        <div class="flex justify-between items-center mb-6">
-            <h3 class="text-xl font-bold flex items-center gap-2"><span class="material-icons-round text-blue-500">video_library</span> Capture Vault</h3>
-            <button id="btnCloseGallery" class="w-10 h-10 rounded-full bg-stone-900 flex items-center justify-center"><span class="material-icons-round">close</span></button>
+    <div id="galleryModal" class="fixed inset-0 bg-black transform translate-y-full transition-transform duration-300 ease-in-out z-50 p-4 pt-10 flex flex-col">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-bold">Session Vault</h3>
+            <button id="btnCloseGallery" class="w-8 h-8 rounded-full bg-neutral-900 flex items-center justify-center"><span class="material-icons-round text-sm">close</span></button>
         </div>
-        <div id="galleryEmptyState" class="flex-1 flex flex-col items-center justify-center text-stone-500 hidden"><span class="material-icons-round text-4xl mb-2">cloud_off</span><p class="text-sm font-mono">No records indexed inside session</p></div>
+        <div id="galleryEmptyState" class="flex-1 flex flex-col items-center justify-center text-neutral-600"><p class="text-xs font-mono">Vault is completely empty</p></div>
         <div id="galleryGrid" class="flex-1 overflow-y-auto grid grid-cols-2 gap-3 pb-6"></div>
     </div>
 
