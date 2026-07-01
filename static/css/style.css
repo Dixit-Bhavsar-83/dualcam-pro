@@ -1,0 +1,56 @@
+/* Core Application System Level Typography Definitions */
+body {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+/* Hide Scrollbar Engine Footprints Across Engines */
+.no-scrollbar::-webkit-scrollbar {
+    display: none;
+}
+.no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
+/* Custom Platform Linear Range Input Transformation */
+.vertical-slider {
+    -webkit-appearance: none;
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 9999px;
+}
+.vertical-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #2563eb;
+    cursor: pointer;
+    box-shadow: 0 0 10px rgba(37, 100, 235, 0.6);
+    transition: transform 0.1s ease;
+}
+.vertical-slider::-webkit-slider-thumb:active {
+    transform: scale(1.3);
+}
+
+/* Rotate and Center vertical configuration inputs safely */
+.rotate-250 {
+    transform: rotate(-90deg);
+}
+
+/* Intermittent grid overlays */
+.camera-grid-overlay {
+    position: absolute;
+    inset: 0;
+    background-image: 
+        linear-gradient(to right, rgba(255,255,255,0.15) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(255,255,255,0.15) 1px, transparent 1px);
+    background-size: 33.333% 33.333%;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.25s ease-in-out;
+    z-index: 10;
+}
+.camera-grid-overlay.active {
+    opacity: 1;
+}
