@@ -4,12 +4,11 @@ document.addEventListener("DOMContentLoaded", () => {
         recordingDuration: 0,
         timerInterval: null,
         flashMode: "off",
-        gridActive: false,
         exposure: 0,
         streams: { front: null, back: null },
         mediaRecorder: null,
         recordedChunks: [],
-        gallery: JSON.parse(localStorage.getItem("dualcam_gallery") || "[]")
+        gallery: []
     };
 
     const safeGet = (id) => document.getElementById(id);
@@ -25,12 +24,11 @@ document.addEventListener("DOMContentLoaded", () => {
         recordTriggerState: safeGet("recordTriggerState"),
         recordingHUD: safeGet("recordingHUD"),
         txtTimer: safeGet("txtTimer"),
-        recordingProgressRing: safeGet("recordingProgressRing"),
-        flashOverlay: safeGet("flashOverlay"),
         exposureSlider: safeGet("exposureSlider"),
         btnOpenSettings: safeGet("btnOpenSettings"),
         settingsBottomSheet: safeGet("settingsBottomSheet"),
         btnCloseSettingsHandle: safeGet("btnCloseSettingsHandle"),
+        btnBackSettings: safeGet("btnBackSettings"),
         btnOpenGallery: safeGet("btnOpenGallery"),
         btnCloseGallery: safeGet("btnCloseGallery"),
         galleryModal: safeGet("galleryModal"),
@@ -38,134 +36,155 @@ document.addEventListener("DOMContentLoaded", () => {
         galleryEmptyState: safeGet("galleryEmptyState"),
         galleryThumb: safeGet("galleryThumb"),
         quickFlash: safeGet("quickFlash"),
-        flashIcon: safeGet("flashIcon"),
-        quickGrid: safeGet("quickGrid"),
-        gridIcon: safeGet("gridIcon")
+        flashIcon: safeGet("flashIcon")
     };
 
-    // Splash Screen Logic
     if (DOM.splashScreen) {
         setTimeout(() => {
             DOM.splashScreen.style.opacity = "0";
             setTimeout(() => {
                 DOM.splashScreen.style.display = "none";
-                if (DOM.permissionScreen) {
-                    DOM.permissionScreen.classList.remove("hidden");
-                }
+                if (DOM.permissionScreen) DOM.permissionScreen.classList.remove("hidden");
             }, 500);
         }, 1200);
     }
 
-    // Permission Handler
     if (DOM.btnGrantPermission) {
         DOM.btnGrantPermission.addEventListener("click", async () => {
             if (DOM.permissionScreen) DOM.permissionScreen.classList.add("hidden");
-            await startupCamera();
+            await initializeAllHardwareSensors();
         });
     }
 
-    // Hardware Cameras Configuration
-    async function startupCamera() {
+    async function initializeAllHardwareSensors() {
+        // Enumerate and find video inputs specifically for mobile constraints
         try {
-            AppState.streams.back = await navigator.mediaDevices.getUserMedia({
-                video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } },
-                audio: true
-            });
-            if (DOM.videoBack) DOM.videoBack.srcObject = AppState.streams.back;
-        } catch (err) {
-            console.warn("Back camera hardware routing failed or blocked.");
-        }
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            const videoDevices = devices.filter(d => d.kind === "videoinput");
+            
+            let backId = null;
+            let frontId = null;
 
-        try {
-            AppState.streams.front = await navigator.mediaDevices.getUserMedia({
-                video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } },
-                audio: false
+            videoDevices.forEach(device => {
+                let label = device.label.toLowerCase();
+                if (label.includes("back") || label.includes("environment") || label.includes("rear")) {
+                    backId = device.deviceId;
+                } else if (label.includes("front") || label.includes("user") || label.includes("facing")) {
+                    frontId = device.deviceId;
+                }
             });
-            if (DOM.videoFront) DOM.videoFront.srcObject = AppState.streams.front;
-        } catch (err) {
-            console.warn("Front camera hardware routing failed or blocked.");
+
+            // Back Sensor Configuration Array Route
+            const backConstraints = backId ? { video: { deviceId: { exact: backId } }, audio: true } : { video: { facingMode: "environment" }, audio: true };
+            try {
+                AppState.streams.back = await navigator.mediaDevices.getUserMedia(backConstraints);
+                if (DOM.videoBack) DOM.videoBack.srcObject = AppState.streams.back;
+            } catch (e) {
+                console.warn("Primary back lens array acquisition failure. Forcing auto environment tracking.");
+                AppState.streams.back = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: true });
+                if (DOM.videoBack) DOM.videoBack.srcObject = AppState.streams.back;
+            }
+
+            // Front Sensor Configuration Array Route
+            const frontConstraints = frontId ? { video: { deviceId: { exact: frontId } } } : { video: { facingMode: "user" } };
+            try {
+                AppState.streams.front = await navigator.mediaDevices.getUserMedia(frontConstraints);
+                if (DOM.videoFront) DOM.videoFront.srcObject = AppState.streams.front;
+            } catch (e) {
+                AppState.streams.front = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
+                if (DOM.videoFront) DOM.videoFront.srcObject = AppState.streams.front;
+            }
+
+        } catch (globalErr) {
+            console.error("Camera pipeline structural error:", globalErr);
         }
-        updateGalleryThumbnails();
     }
 
-    // Video Recording Implementation (Red Button Controls)
+    // Native Torch Toggle Configuration
+    if (DOM.quickFlash) {
+        DOM.quickFlash.addEventListener("click", async () => {
+            AppState.flashMode = AppState.flashMode === "off" ? "on" : "off";
+            if (DOM.flashIcon) {
+                DOM.flashIcon.innerText = AppState.flashMode === "on" ? "flash_on" : "flash_off";
+                DOM.flashIcon.classList.toggle("text-yellow-400", AppState.flashMode === "on");
+            }
+            if (AppState.streams.back) {
+                const videoTrack = AppState.streams.back.getVideoTracks()[0];
+                if (videoTrack && typeof videoTrack.getCapabilities === "function") {
+                    const capabilities = videoTrack.getCapabilities();
+                    if (capabilities.torch) {
+                        try {
+                            await videoTrack.applyConstraints({ advanced: [{ torch: AppState.flashMode === "on" }] });
+                        } catch (torchErr) {
+                            console.warn("Torch constraints activation blocked by host browser layer.");
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    // Unified Media Stream Composite Recording & Safe Downloader
     if (DOM.btnRecord) {
         DOM.btnRecord.addEventListener("click", () => {
             if (!AppState.isRecording) {
-                // Start Recording Setup
                 AppState.isRecording = true;
                 AppState.recordingDuration = 0;
                 AppState.recordedChunks = [];
 
                 if (DOM.recordingHUD) DOM.recordingHUD.classList.remove("opacity-0");
-                
-                // Animate Red Button (Circle to Square)
                 if (DOM.recordTriggerState) {
                     DOM.recordTriggerState.style.borderRadius = "4px";
                     DOM.recordTriggerState.style.transform = "scale(0.8)";
                 }
 
-                // Trigger Flash Overlay if ON
-                if (AppState.flashMode === "on" && DOM.flashOverlay) {
-                    DOM.flashOverlay.style.opacity = "1";
-                    setTimeout(() => DOM.flashOverlay.style.opacity = "0", 150);
-                }
-
-                // Native stream integration
-                let combinedStream = new MediaStream();
+                let syncStream = new MediaStream();
                 if (AppState.streams.back) {
-                    AppState.streams.back.getTracks().forEach(track => combinedStream.addTrack(track));
+                    AppState.streams.back.getTracks().forEach(t => syncStream.addTrack(t));
+                }
+                if (AppState.streams.front) {
+                    AppState.streams.front.getVideoTracks().forEach(t => syncStream.addTrack(t));
                 }
 
                 try {
-                    AppState.mediaRecorder = new MediaRecorder(combinedStream, { mimeType: "video/webm" });
+                    AppState.mediaRecorder = new MediaRecorder(syncStream);
                     AppState.mediaRecorder.ondataavailable = (e) => {
                         if (e.data && e.data.size > 0) AppState.recordedChunks.push(e.data);
                     };
                     AppState.mediaRecorder.onstop = () => {
-                        const blob = new Blob(AppState.recordedChunks, { type: "video/webm" });
-                        const url = URL.createObjectURL(blob);
+                        const fileBlob = new Blob(AppState.recordedChunks, { type: "video/webm" });
+                        const storageUrl = URL.createObjectURL(fileBlob);
                         
-                        // Local System Auto-Download Trigger
-                        const a = document.createElement("a");
-                        a.href = url;
-                        a.download = "DualCam_" + Date.now() + ".webm";
-                        document.body.appendChild(a);
-                        a.click();
-                        document.body.removeChild(a);
+                        const downloaderHook = document.createElement("a");
+                        downloaderHook.href = storageUrl;
+                        downloaderHook.download = "DualCamCapture_" + Date.now() + ".webm";
+                        document.body.appendChild(downloaderHook);
+                        downloaderHook.click();
+                        document.body.removeChild(downloaderHook);
 
-                        AppState.gallery.unshift({ id: Date.now(), url: url, date: new Date().toLocaleDateString() });
-                        localStorage.setItem("dualcam_gallery", JSON.stringify(AppState.gallery));
-                        updateGalleryThumbnails();
+                        AppState.gallery.unshift({ id: Date.now(), url: storageUrl, date: new Date().toLocaleDateString() });
+                        if (DOM.galleryThumb) DOM.galleryThumb.classList.add("text-blue-500");
                     };
                     AppState.mediaRecorder.start();
-                } catch (e) {
-                    console.error("MediaRecorder setup failed:", e);
+                } catch (recErr) {
+                    console.error("Recording engine initialization halted:", recErr);
                 }
 
-                // HUD Timer Loop
                 AppState.timerInterval = setInterval(() => {
                     AppState.recordingDuration++;
                     let m = String(Math.floor(AppState.recordingDuration / 60)).padStart(2, '0');
                     let s = String(AppState.recordingDuration % 60).padStart(2, '0');
                     if (DOM.txtTimer) DOM.txtTimer.innerText = m + ":" + s;
-                    if (DOM.recordingProgressRing) {
-                        DOM.recordingProgressRing.style.strokeDashoffset = String(264 - ((AppState.recordingDuration % 60) / 60 * 264));
-                    }
                 }, 1000);
 
             } else {
-                // Stop Recording Setup
                 AppState.isRecording = false;
                 clearInterval(AppState.timerInterval);
                 if (DOM.recordingHUD) DOM.recordingHUD.classList.add("opacity-0");
-                
-                // Reset Button Shape (Square to Circle)
                 if (DOM.recordTriggerState) {
                     DOM.recordTriggerState.style.borderRadius = "50%";
                     DOM.recordTriggerState.style.transform = "scale(1)";
                 }
-                if (DOM.recordingProgressRing) DOM.recordingProgressRing.style.strokeDashoffset = "264";
 
                 if (AppState.mediaRecorder && AppState.mediaRecorder.state !== "inactive") {
                     AppState.mediaRecorder.stop();
@@ -174,81 +193,19 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
-    // Grid System Controls
-    if (DOM.quickGrid && DOM.cameraViewport) {
-        DOM.quickGrid.addEventListener("click", () => {
-            AppState.gridActive = !AppState.gridActive;
-            DOM.cameraViewport.classList.toggle("grid-hidden", !AppState.gridActive);
-            if (DOM.gridIcon) DOM.gridIcon.classList.toggle("text-blue-500", AppState.gridActive);
-        });
-    }
-
-    // Flash/Torch Controls
-    if (DOM.quickFlash) {
-        DOM.quickFlash.addEventListener("click", () => {
-            AppState.flashMode = AppState.flashMode === "off" ? "on" : "off";
-            if (DOM.flashIcon) {
-                DOM.flashIcon.innerText = AppState.flashMode === "on" ? "flash_on" : "flash_off";
-                DOM.flashIcon.classList.toggle("text-yellow-400", AppState.flashMode === "on");
-            }
-        });
-    }
-
-    // Exposure Slider Matrix
     if (DOM.exposureSlider) {
         DOM.exposureSlider.addEventListener("input", (e) => {
             AppState.exposure = parseFloat(e.target.value);
-            let filterValue = "brightness(" + (1 + AppState.exposure * 0.25) + ")";
-            if (DOM.videoBack) DOM.videoBack.style.filter = filterValue;
+            if (DOM.videoBack) DOM.videoBack.style.filter = "brightness(" + (1 + AppState.exposure * 0.2) + ")";
         });
     }
 
-    // Touch Dragging Setup for PIP Front Cam Window
-    let isDragging = false, startX = 0, startY = 0, initL = 0, initT = 0;
-    if (DOM.frontCamContainer) {
-        DOM.frontCamContainer.addEventListener("pointerdown", (e) => {
-            isDragging = true;
-            startX = e.clientX; startY = e.clientY;
-            initL = DOM.frontCamContainer.offsetLeft;
-            initT = DOM.frontCamContainer.offsetTop;
-            DOM.frontCamContainer.setPointerCapture(e.pointerId);
-        });
-        DOM.frontCamContainer.addEventListener("pointermove", (e) => {
-            if (!isDragging) return;
-            let dx = e.clientX - startX, dy = e.clientY - startY;
-            DOM.frontCamContainer.style.left = (initL + dx) + "px";
-            DOM.frontCamContainer.style.top = (initT + dy) + "px";
-        });
-        DOM.frontCamContainer.addEventListener("pointerup", (e) => {
-            isDragging = false;
-            DOM.frontCamContainer.releasePointerCapture(e.pointerId);
-        });
-    }
-
-    // Panels/Drawers Toggles
+    // Fixed Bottom Drawer Engine Opening & Back Routine Closures
+    const hideSettings = () => DOM.settingsBottomSheet?.classList.add("translate-y-full");
     if (DOM.btnOpenSettings) DOM.btnOpenSettings.addEventListener("click", () => DOM.settingsBottomSheet?.classList.remove("translate-y-full"));
-    if (DOM.btnCloseSettingsHandle) DOM.btnCloseSettingsHandle.addEventListener("click", () => DOM.settingsBottomSheet?.classList.add("translate-y-full"));
-    if (DOM.btnOpenGallery) DOM.btnOpenGallery.addEventListener("click", () => { renderGallery(); DOM.galleryModal?.classList.remove("translate-y-full"); });
+    if (DOM.btnCloseSettingsHandle) DOM.btnCloseSettingsHandle.addEventListener("click", hideSettings);
+    if (DOM.btnBackSettings) DOM.btnBackSettings.addEventListener("click", hideSettings);
+
+    if (DOM.btnOpenGallery) DOM.btnOpenGallery.addEventListener("click", () => DOM.galleryModal?.classList.remove("translate-y-full"));
     if (DOM.btnCloseGallery) DOM.btnCloseGallery.addEventListener("click", () => DOM.galleryModal?.classList.add("translate-y-full"));
-
-    function updateGalleryThumbnails() {
-        if (!DOM.galleryThumb) return;
-        if (AppState.gallery.length > 0) DOM.galleryThumb.innerHTML = '<span class="material-icons-round text-blue-500">play_circle</span>';
-    }
-
-    function renderGallery() {
-        if (!DOM.galleryGrid) return;
-        DOM.galleryGrid.innerHTML = "";
-        if (AppState.gallery.length === 0) {
-            DOM.galleryEmptyState?.classList.remove("hidden");
-            return;
-        }
-        DOM.galleryEmptyState?.classList.add("hidden");
-        AppState.gallery.forEach(item => {
-            const div = document.createElement("div");
-            div.className = "bg-stone-900 p-3 rounded-2xl flex flex-col gap-2 border border-stone-800";
-            div.innerHTML = '<video src="' + item.url + '" class="w-full aspect-video object-cover rounded-xl" controls></video><span class="text-[10px] font-mono text-stone-400 text-center">' + item.date + '</span>';
-            DOM.galleryGrid.appendChild(div);
-        });
-    }
 });
